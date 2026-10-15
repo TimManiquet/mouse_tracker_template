@@ -258,6 +258,25 @@
         }
     };
 
+    // button positions are measured while the buttons are on screen (on_load);
+    // jsPsych has already cleared the display by the time on_finish runs (so we need to measure the button position on_load)
+    var last_start_button_position = null;
+    var current_trial_layout = {};
+    function get_rect(selector) {
+        var el = document.querySelector(selector);
+        if (!el) return null;
+        var r = el.getBoundingClientRect();
+        return [r.left, r.bottom, r.width, r.height]; // bottom-left x, bottom-left y, width, height (viewport px, y measured from top)
+    }
+    function measure_trial_layout(left_id, right_id) {
+        current_trial_layout = {
+            screen_width: window.innerWidth,
+            screen_height: window.innerHeight,
+            response_button_positions: [get_rect(left_id), get_rect(right_id)], // [left button, right button]
+            starting_button_position: last_start_button_position
+        };
+    }
+
     // start of the trial: box with fixation cross to press
     // note that this event is re-used in the main task
     var trial_start = {
@@ -266,6 +285,10 @@
         choices: ['+'],
         response_ends_trial: true,
         button_html: '<button id="trial_start_button" class"jspsych-btn" style="position:absolute; align-items: center; bottom: 270px; width:30px; font-size:25px;">%choice%</button>',
+        on_load: function(){
+            // the start button only exists on this screen, so measure it here
+            last_start_button_position = get_rect('#trial_start_button');
+        },
         data: {
             'event': 'trial_start',
         }
@@ -304,17 +327,13 @@
             event: 'training_trial',
             filename: jsPsych.timelineVariable('filename'),
         },
+        on_load: function(){
+            measure_trial_layout('#training_trial_left_button', '#training_trial_right_button');
+        },
         on_finish: function(data){
             data.answer = button_labels[jsPsych.data.get().last(1).values()[0].response];
             data.targets = button_labels; // save the trial targets
-            // fetch the screen dimensions
-            var screen_width = window.innerWidth;
-            var screen_height = window.innerHeight;
-            data.screen_width = screen_width;
-            data.screen_height = screen_height;
-            // Calculate the start button position relative to the screen
-            data.button_left = (screen_width - 30) / 2; // Adjust '30' according to your button width
-            data.button_bottom = screen_height - 270; // Adjust '270' according to your button height
+            Object.assign(data, current_trial_layout); // screen size + position of the 3 buttons (response_button_positions, starting_button_position)
         }
     };
 
@@ -408,8 +427,8 @@
         ],
         button_html: function() {
             return (
-                ['<button id="training_trial_left_button" class="jspsych-response-btn">'+update_choices()[0]+'</button>',
-                '<button id="training_trial_right_button" class="jspsych-response-btn">'+update_choices()[1]+'</button>']
+                ['<button id="main_trial_left_button" class="jspsych-response-btn">'+update_choices()[0]+'</button>',
+                '<button id="main_trial_right_button" class="jspsych-response-btn">'+update_choices()[1]+'</button>']
                 )
             },
             stimulus_duration: image_duration,
@@ -418,20 +437,17 @@
                 event: 'main_trial',
                 filename: jsPsych.timelineVariable('filename')
             },
+            on_load: function(){
+                measure_trial_layout('#main_trial_left_button', '#main_trial_right_button');
+            },
             on_finish: function(data){ // adding block count and trial count info
                 data.answer = update_choices()[jsPsych.data.get().last(1).values()[0].response];
                 data.block_number = block_count;
                 data.trial_number = trial_count;
                 data.run_number = run_count;
-                data.targets = update_choices(); // save the trial targets
-                // fetch the screen dimensions
-                var screen_width = window.innerWidth;
-                var screen_height = window.innerHeight;
-                data.screen_width = screen_width;
-                data.screen_height = screen_height;
-                // Calculate the start button position relative to the screen
-                data.button_left = (screen_width - 30) / 2; // Adjust '30' according to your button width
-                data.button_bottom = screen_height - 270; // Adjust '270' according to your button height            
+                targets = update_choices();
+                data.targets = targets; // save the trial targets
+                Object.assign(data, current_trial_layout); // screen size + position of the 3 buttons (response_button_positions, starting_button_position)
                 // update the trial count
                 trial_count+=1;
             }
